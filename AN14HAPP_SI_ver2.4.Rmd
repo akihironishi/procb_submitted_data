@@ -1,0 +1,208 @@
+---
+title: "Extended Methods for 'Status Invisibility Improves Emotional Well-being and Alleviates its Economic Gradient in Social Network Experiments'"
+author: "Akihiro Nishi, Christopher A. German, Sage K. Iwamoto, and Nicholas A. Christakis"
+date: "11/7/2022"
+output: pdf_document
+---
+
+## 1. Install and load some packages  
+We have installed packages below (that are going to be used.)
+```{r}
+#install.packages("lme4")
+library(lme4) #multi-level modeling
+library(lmerTest) #testing in multi-level modeling
+library(mediation) #causal mediation analysis
+```
+
+## 2. Data setting
+
+### 2.1. Import the necessary data
+
+The two .csv files for replicating the main results are available on AN’s Github page (https://github.com/akihironishi).
+```{r}
+setwd("/Users/akihironishi/Dropbox/ArticlesAN/UR-AN14HAPP-ProcB/NEW/Data/")
+#Change the directory by yourself
+HappStandard = read.csv("HappStandard.csv")
+#HappStandard for the first series of experiments (no harming option)
+HarmStandard = read.csv("HarmStandard.csv")
+#HarmStandard for the second series of experiments (harming option)
+```
+
+### 2.2. The list of variables  
+
+**game**: game ID (top digit is 1: first series, 2: second series)  
+**superid**: individual ID (top three digits are game ID)  
+**round**: round 0-15  
+**showScore**: 0 for invisible and 1 for visible  
+**initScore**: 200 for the poor and 1150 for the rich  
+**payoff**: payoff at each round  
+**cumulativePayoff**: cumulative payoff (absolute wealth)  
+**cPayoffS**: wealth standardized (relative wealth)
+**WealthLevel**: wealth category (5 caegories based on SD)  
+**coop**: 1 for cooperating  
+**local_rate_coop**: the proportion of cooperation among the connecting neighbors of each study participant  
+**degree**: The number of social ties (connecting neighbors)  
+**happ**: Subjective Well-being (-2 to 2)  
+**harm**: 1 for harming  
+
+## 3. Main regression analysis  
+
+### 3.1. First series (with and without an interaction term): HappStandard   
+
+```{r}
+#invisible only
+summary(lmer(data = HappStandard[HappStandard$showScore==0,], happ ~ cPayoffS
+             + factor(round) + (1|game) + (1|superid)))$coef
+#visible only
+summary(lmer(data = HappStandard[HappStandard$showScore==1,], happ ~ cPayoffS
+             + factor(round) + (1|game) + (1|superid)))$coef
+#invisible + visible, without an interaction term
+summary(lmer(data = HappStandard, happ ~ showScore + cPayoffS + factor(round)
+             + (1|game) + (1|superid)))$coef
+#invisible + visible, with an interaction term
+summary(lmer(data = HappStandard, happ ~ showScore * cPayoffS + factor(round)
+             + (1|game) + (1|superid)))$coef
+```
+
+### 3.2. Second series (with and without an interaction term): HarmStandard  
+
+```{r}
+#invisible only
+summary(lmer(data = HarmStandard[HarmStandard$showScore==0,], happ ~ cPayoffS
+             + factor(round) + (1|game) + (1|superid)))$coef
+#visible only
+summary(lmer(data = HarmStandard[HarmStandard$showScore==1,], happ ~ cPayoffS
+             + factor(round) + (1|game) + (1|superid)))$coef
+#invisible + visible, without an interaction term
+summary(lmer(data = HarmStandard, happ ~ showScore + cPayoffS + factor(round)
+             + (1|game) + (1|superid)))$coef
+#invisible + visible, with an interaction term
+summary(lmer(data = HarmStandard, happ ~ showScore * cPayoffS + factor(round)
+             + (1|game) + (1|superid)))$coef
+```
+
+## 4. Causal mediation analysis  
+
+We use the "local_rate_coop" variable as a potential mediator of the showScore - happ association.  
+
+```{r}
+detach(package:lmerTest, unload=TRUE)
+#COMMENT: lmerTest package has a conflict with mediation package
+```
+
+### 4.1. HappStandard: First series (with different clusters)    
+
+```{r}
+happ.mediator.fit <- lmer(data = HappStandard, local_rate_coop ~ showScore 
+                          + cPayoffS + factor(round) + (1|superid))
+happ.outcome.fit <- lmer(data = HappStandard, happ ~ local_rate_coop 
+                         + showScore + cPayoffS + factor(round) + (1|superid))
+happ_med <- mediate(happ.mediator.fit, happ.outcome.fit, 
+                    treat = "showScore", mediator = "local_rate_coop")
+#"mediate does not support more than two levels per model" 
+#-> a lower cluster was chosen.
+summary(happ_med) #Prop. Mediated: 0.1705 (output will vary due to simulations)
+
+#REPRODUCTION with a different cluster
+happ.mediator.fit <- lmer(data = HappStandard, local_rate_coop ~ showScore 
+                          + cPayoffS + factor(round) + (1|game))
+happ.outcome.fit <- lmer(data = HappStandard, happ ~ local_rate_coop 
+                         + showScore + cPayoffS + factor(round) + (1|game))
+happ_med <- mediate(happ.mediator.fit, happ.outcome.fit, 
+                    treat = "showScore", mediator = "local_rate_coop")
+summary(happ_med) #Prop. Mediated: 0.12536 (a little bit attenuated)
+```
+
+### 4.2. HarmStandard: Second series (with different clusters)  
+
+```{r}
+harm.mediator.fit <- lmer(data = HarmStandard, local_rate_coop ~ showScore 
+                          + cPayoffS + factor(round) + (1|superid))
+harm.outcome.fit <- lmer(data = HarmStandard, happ ~ local_rate_coop 
+                         + showScore +  cPayoffS + factor(round) + (1|superid))
+harm_med <- mediate(harm.mediator.fit, harm.outcome.fit, 
+                    treat = "showScore", mediator = "local_rate_coop")
+summary(harm_med) #Prop. Mediated: 0.3744 (output will vary due to simulations)
+
+#REPRODUCTION with a different cluster
+harm.mediator.fit <- lmer(data = HarmStandard, local_rate_coop ~ showScore 
+                          + cPayoffS + factor(round) + (1|game))
+harm.outcome.fit <- lmer(data = HarmStandard, happ ~ local_rate_coop 
+                         + showScore + cPayoffS + factor(round) + (1|game))
+harm_med <- mediate(harm.mediator.fit, harm.outcome.fit, 
+                    treat = "showScore", mediator = "local_rate_coop")
+summary(harm_med) #Prop. Mediated: 0.251 (a little bit attenuated)
+```
+
+```{r}
+library(lmerTest) #make lmerTest package back for further analysis
+```
+
+## 5. Additional analysis  
+
+### 5.1. Cooperation rate over the 15 rounds (a dichotomous variable)  
+
+```{r}
+#First series
+happ_data1 = HappStandard[HappStandard$round>=1,
+                          c("game","superid","showScore","round","coop")]
+happ_data2 = reshape(happ_data1,timevar="round",
+                     idvar=c("game","superid","showScore"),direction="wide")
+happ_data2$coop_rate = apply(happ_data2[,substr(names(happ_data2),1,4)=="coop"],
+                             1,function(x) mean(x,na.rm=T))
+summary(lmer(data = happ_data2, coop_rate ~ showScore + (1|game)))$coef
+
+#Second series
+harm_data1 = HarmStandard[HarmStandard$round>=1,
+                          c("game","superid","showScore","round","coop")]
+harm_data2 = reshape(as.data.frame(harm_data1),timevar="round",
+                     idvar=c("game","superid","showScore"),direction="wide")
+harm_data2$coop_rate = apply(harm_data2[,substr(names(harm_data2),1,4)=="coop"],
+                             1,function(x) mean(x,na.rm=T))
+summary(lmer(data = harm_data2, coop_rate ~ showScore + (1|game)))$coef
+```
+
+### 5.2. Happiness comparison (first series v.s. second series)  
+
+```{r}
+HappStandard$series = "happ"
+HarmStandard$series = "harm"
+totaldata = rbind(HappStandard,HarmStandard)
+summary(lmer(data = totaldata, happ ~ series + factor(round)
+             + (1|game) + (1|superid)))$coef
+```
+
+### 5.3. Harming option execution rate over the 15 rounds  
+
+```{r}
+harm_data1H = HarmStandard[HarmStandard$round>=1,
+                           c("game","superid","showScore","round","harm")]
+harm_data2H = reshape(as.data.frame(harm_data1H),timevar="round",
+                      idvar=c("game","superid","showScore"),direction="wide")
+harm_data2H$harm_rate = apply(harm_data2H[,substr(names(harm_data2H),1,4)=="harm"]
+                              ,1,function(x) mean(x,na.rm=T))
+summary(lmer(data = harm_data2H, harm_rate ~ showScore + (1|game)))$coef
+```
+
+### 5.4. Follow-up analysis for Easterlin's Paradox  
+
+**Question 1**: Did happiness increase as the rounds progressed in general?   
+**A**: No.  
+
+```{r}
+summary(lmer(data = HappStandard, happ ~ showScore + cPayoffS + round 
+             + (1|game) + (1|superid)))$coef
+summary(lmer(data = HarmStandard, happ ~ showScore + cPayoffS + round
+             + (1|game) + (1|superid)))$coef
+```
+
+**Question 2**: After relative wealth is incorporated into the model, did absolute wealth matter?   
+**A**: No, relative wealth has little predictive ability on the outcome.  
+
+```{r}
+summary(lmer(data = HappStandard, happ ~ showScore + cPayoffS 
+             + cumulativePayoff + round + (1|game) + (1|superid)))$coef
+summary(lmer(data = HarmStandard, happ ~ showScore + cPayoffS 
+             + cumulativePayoff + round + (1|game) + (1|superid)))$coef
+#Both Ps for cumulativePayoff (absolute wealth) > 0.10
+```
